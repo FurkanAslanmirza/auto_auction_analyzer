@@ -5,35 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ddb5fb83-5972-4aab-9e95-9cdbabb46464" name="Changes" comment="a">
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ai_integration/deepseek_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/ai_integration/deepseek_client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/auction_debug.log" beforeDir="false" afterPath="$PROJECT_DIR$/market_data/market_provider.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/auto_auction_analyzer.iml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/dashboard/dashboard.log" beforeDir="false" afterPath="$PROJECT_DIR$/pdf_extractor/pdf_extractor.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/dashboard/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/dashboard/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data_analysis/analyzer.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_analysis/analyzer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/database/enhanced_db_manager.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/market_data/enhanced_market_provider.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/ai_pdf_extractor.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/auction_catalog_extractor.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/debug_tool.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/enhanced_extractor.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/extractor.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/extrahierte_fahrzeugdaten_debug.csv" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/output/gewinnmargen.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/output/preisvergleich.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/output/profitabilitaet_verteilung.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/output/roi.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/output/saisonale_analyse.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/output/segmentanalyse.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/pdf_debug.log" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_extractor/templates/autobid_template.json.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pdf_files/Katalog_74557_1203_a.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/scraper/mobile_de_scraper.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/market_data/market_provider.py" beforeDir="false" afterPath="$PROJECT_DIR$/market_data/market_provider.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -53,6 +26,7 @@
   <component name="Git.Settings">
     <option name="RECENT_BRANCH_BY_REPOSITORY">
       <map>
+        <entry key="$PROJECT_DIR$" value="master3" />
         <entry key="$PROJECT_DIR$" value="master" />
       </map>
     </option>
@@ -143,7 +117,7 @@
       <workItem from="1742830075495" duration="3000" />
       <workItem from="1742950255072" duration="623000" />
       <workItem from="1742951003558" duration="654000" />
-      <workItem from="1742957699305" duration="6070000" />
+      <workItem from="1742957699305" duration="6757000" />
     </task>
     <task id="LOCAL-00001" summary="a">
       <option name="closed" value="true" />
@@ -177,7 +151,23 @@
       <option name="project" value="LOCAL" />
       <updated>1742963301382</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="a">
+      <option name="closed" value="true" />
+      <created>1742965301473</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1742965301473</updated>
+    </task>
+    <task id="LOCAL-00006" summary="a">
+      <option name="closed" value="true" />
+      <created>1742965421252</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1742965421252</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

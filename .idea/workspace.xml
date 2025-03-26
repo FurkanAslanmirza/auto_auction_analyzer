@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="ddb5fb83-5972-4aab-9e95-9cdbabb46464" name="Changes" comment="a">
+      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ai_integration/deepseek_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/ai_integration/deepseek_client.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/auction_debug.log" beforeDir="false" afterPath="$PROJECT_DIR$/market_data/market_provider.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/auto_auction_analyzer.iml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/dashboard/dashboard.log" beforeDir="false" afterPath="$PROJECT_DIR$/pdf_extractor/pdf_extractor.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/dashboard/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/dashboard/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data_analysis/analyzer.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_analysis/analyzer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/database/enhanced_db_manager.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/market_data/enhanced_market_provider.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/ai_pdf_extractor.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/auction_catalog_extractor.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/debug_tool.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/enhanced_extractor.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/extractor.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/extrahierte_fahrzeugdaten_debug.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/output/gewinnmargen.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/output/preisvergleich.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/output/profitabilitaet_verteilung.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/output/roi.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/output/saisonale_analyse.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/output/segmentanalyse.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/pdf_debug.log" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_extractor/templates/autobid_template.json.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pdf_files/Katalog_74557_1203_a.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scraper/mobile_de_scraper.py" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ComposerSettings">
+    <execution />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="master" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;FurkanAslanmirza&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/FurkanAslanmirza/auto_auction_analyzer.git&quot;,
+    &quot;accountId&quot;: &quot;51eab976-3b11-4d59-bde0-d424947cdf2a&quot;
+  }
+}</component>
+  <component name="KubernetesApiPersistence"><![CDATA[{}]]></component>
+  <component name="KubernetesApiProvider"><![CDATA[{
+  "isMigrated": true
+}]]></component>
+  <component name="PhpWorkspaceProjectConfiguration" interpreter_name="C:\php\php.exe" />
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 7
+}</component>
+  <component name="ProjectId" id="2u0wpa8qdS67vBpA0X29R1zq0aF" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "Python.ai_pdf_extractor.executor": "Run",
+    "Python.auction_catalog_extractor.executor": "Run",
+    "Python.deepseek_client.executor": "Run",
+    "Python.main.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "git-widget-placeholder": "master2",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "C:/Users/Furka/Documents/GitHub/auto_auction_analyzer",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "org.jetbrains.plugins.github.ui.GithubSettingsConfigurable",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\Furka\Documents\GitHub\auto_auction_analyzer\pdf_files" />
+    </key>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-9823dce3aa75-a94e463ab2e7-intellij.indexing.shared.core-IU-243.26053.27" />
+        <option value="bundled-js-predefined-d6986cc7102b-1632447f56bf-JavaScript-IU-243.26053.27" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="ddb5fb83-5972-4aab-9e95-9cdbabb46464" name="Changes" comment="" />
+      <created>1741398989217</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1741398989217</updated>
+      <workItem from="1741398990290" duration="7640000" />
+      <workItem from="1741536669181" duration="20000" />
+      <workItem from="1741906075440" duration="74000" />
+      <workItem from="1741906172408" duration="218000" />
+      <workItem from="1742769120727" duration="1894000" />
+      <workItem from="1742771965317" duration="464000" />
+      <workItem from="1742772599893" duration="3000" />
+      <workItem from="1742778319117" duration="29000" />
+      <workItem from="1742782560427" duration="341000" />
+      <workItem from="1742782913212" duration="719000" />
+      <workItem from="1742784692069" duration="722000" />
+      <workItem from="1742830075495" duration="3000" />
+      <workItem from="1742950255072" duration="623000" />
+      <workItem from="1742951003558" duration="654000" />
+      <workItem from="1742957699305" duration="6070000" />
+    </task>
+    <task id="LOCAL-00001" summary="a">
+      <option name="closed" value="true" />
+      <created>1741403070346</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1741403070346</updated>
+    </task>
+    <task id="LOCAL-00002" summary="a">
+      <option name="closed" value="true" />
+      <created>1741403183568</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1741403183568</updated>
+    </task>
+    <task id="LOCAL-00003" summary="a">
+      <option name="closed" value="true" />
+      <created>1742961672187</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1742961672187</updated>
+    </task>
+    <task id="LOCAL-00004" summary="a">
+      <option name="closed" value="true" />
+      <created>1742963301382</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1742963301382</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="a" />
+    <option name="LAST_COMMIT_MESSAGE" value="a" />
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/auto_auction_analyzer$main.coverage" NAME="main Coverage Results" MODIFIED="1742769372781" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/dashboard" />
+    <SUITE FILE_PATH="coverage/auto_auction_analyzer$deepseek_client.coverage" NAME="deepseek_client Coverage Results" MODIFIED="1742769394976" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ai_integration" />
+    <SUITE FILE_PATH="coverage/auto_auction_analyzer$auction_catalog_extractor.coverage" NAME="auction_catalog_extractor Coverage Results" MODIFIED="1742961952300" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/pdf_extractor" />
+    <SUITE FILE_PATH="coverage/auto_auction_analyzer$ai_pdf_extractor.coverage" NAME="ai_pdf_extractor Coverage Results" MODIFIED="1742782615671" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/pdf_extractor" />
+  </component>
+</project>

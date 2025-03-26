@@ -8,14 +8,14 @@ import pandas as pd
 import subprocess
 import sys
 
-# Import fortschrittlicher Versionen der Module
-from pdf_extractor.enhanced_extractor import EnhancedPdfExtractor
-from market_data.enhanced_market_provider import EnhancedMarketDataProvider
-from data_analysis.enhanced_analyzer import EnhancedVehicleAnalyzer
+# Imports der Standardversionen statt Enhanced-Versionen
+from pdf_extractor.pdf_extractor import PdfExtractor
+from market_data.market_provider import MarketDataProvider
+from data_analysis.analyzer import VehicleAnalyzer
 from ai_integration.deepseek_client import DeepSeekClient
 from utils.config import OUTPUT_DIR, DATA_DIR
 
-# Logging konfigurieren
+# Logging-Konfiguration
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -60,10 +60,10 @@ class AutoAuctionAnalyzer:
         # Ausgabeverzeichnis erstellen, falls nicht vorhanden
         os.makedirs(self.config['output_dir'], exist_ok=True)
 
-        # Module initialisieren mit optimierten Versionen
-        self.pdf_extractor = EnhancedPdfExtractor()
-        self.market_provider = EnhancedMarketDataProvider()
-        self.analyzer = EnhancedVehicleAnalyzer()
+        # Module initialisieren mit Standardversionen
+        self.pdf_extractor = PdfExtractor()
+        self.market_provider = MarketDataProvider()
+        self.analyzer = VehicleAnalyzer()
 
         # Analyseeinstellungen anpassen
         self.analyzer.parameters['min_profit_margin_percent'] = self.config['min_profit_margin']

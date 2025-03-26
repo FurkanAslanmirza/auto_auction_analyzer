@@ -143,11 +143,23 @@ class DeepSeekClient:
 
             # Ermittle den Betriebssystemtyp
             if os.name == 'nt':  # Windows
-                start_cmd = ["start", "cmd", "/c", "ollama", "serve"]
-                subprocess.Popen(start_cmd, shell=True)
+                # Verwende subprocess.run statt Popen für bessere Kontrolle
+                subprocess.run(
+                    ["cmd", "/c", "start", "/b", "ollama", "serve"],
+                    shell=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace'
+                )
             else:  # Linux/macOS
-                start_cmd = ["ollama", "serve"]
-                subprocess.Popen(start_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                subprocess.Popen(
+                    ["ollama", "serve"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace'
+                )
 
             # Warte, bis der Server gestartet ist
             for i in range(10):
@@ -168,6 +180,8 @@ class DeepSeekClient:
             logger.error(f"Fehler beim Starten von Ollama: {str(e)}")
             return False
 
+
+
     def _pull_model(self):
         """
         Lädt das DeepSeek-R1 Modell herunter, falls es nicht vorhanden ist.
@@ -178,7 +192,7 @@ class DeepSeekClient:
         try:
             logger.info(f"Lade Modell {self.config.MODEL_NAME} herunter...")
             pull_cmd = ["ollama", "pull", self.config.MODEL_NAME]
-            result = subprocess.run(pull_cmd, capture_output=True, text=True)
+            result = subprocess.run(pull_cmd, capture_output=True, text=True, encoding='utf8', errors='replace', check=False)
 
             if result.returncode != 0:
                 logger.error(f"Fehler beim Herunterladen des Modells: {result.stderr}")

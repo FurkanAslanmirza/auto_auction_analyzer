@@ -2,6 +2,7 @@
 import pdfplumber
 import re
 import pandas as pd
+import sys
 import numpy as np
 import logging
 import time
@@ -66,8 +67,7 @@ class PdfExtractor:
 
     def extract_from_pdf(self, pdf_path: str) -> List[Dict[str, Any]]:
         """
-        Extrahiert Fahrzeugdaten aus einem PDF mit einer Kombination aus
-        regelbasierter Extraktion und KI-Unterstützung.
+        Extrahiert Fahrzeugdaten aus einem PDF mit KI-basierter Extraktion.
 
         Args:
             pdf_path (str): Pfad zur PDF-Datei
@@ -83,41 +83,18 @@ class PdfExtractor:
                 logger.error(f"Ungültige PDF-Datei: {pdf_path}")
                 return []
 
-            # Schritt 2: Versuche zunächst die regelbasierte Extraktion
-            rule_based_results = self._extract_rule_based(pdf_path)
-
-            # Wenn die regelbasierte Extraktion erfolgreich war, verwende diese
-            if rule_based_results and len(rule_based_results) > 0:
-                # Validiere die Ergebnisse
-                valid_results = [r for r in rule_based_results if self._validate_vehicle_data(r)]
-                logger.info(f"Regelbasierte Extraktion lieferte {len(valid_results)} valide Fahrzeuge.")
-
-                # Wenn mehr als 70% der Ergebnisse valide sind, betrachte es als Erfolg
-                if len(valid_results) > 0 and len(valid_results) >= 0.7 * len(rule_based_results):
-                    return valid_results
-
-            # Schritt 3: Wenn die regelbasierte Extraktion nicht funktioniert hat, versuche die KI-basierte Extraktion
-            logger.info("Verwende KI-basierte Extraktion als Fallback.")
+            # Schritt 2: Extrahiere den PDF-Inhalt mit erweiterter Genauigkeit
+            logger.info("Verwende KI-basierte Extraktion")
             pdf_content = self._extract_pdf_content_enhanced(pdf_path)
 
-            # Erste KI-Extraktion mit Text und Tabellen
+            # Schritt 3: KI-Extraktion mit dem extrahierten Inhalt
             ai_results = self._extract_with_ollama(pdf_content)
 
             # Validiere die Ergebnisse
             valid_ai_results = [r for r in ai_results if self._validate_vehicle_data(r)]
             logger.info(f"KI-basierte Extraktion lieferte {len(valid_ai_results)} valide Fahrzeuge.")
 
-            if valid_ai_results:
-                return valid_ai_results
-
-            # Schritt 4: Wenn die KI-Extraktion keine validen Ergebnisse liefert,
-            # versuche es mit einer robusteren OCR-basierten Methode
-            if not valid_ai_results:
-                logger.info("Versuche OCR-basierte Extraktion als letzten Fallback...")
-                ocr_content = self._extract_with_ocr(pdf_path)
-                return self._extract_with_ollama(ocr_content, more_detailed=True)
-
-            return []
+            return valid_ai_results
 
         except Exception as e:
             logger.error(f"Fehler bei der Extraktion: {str(e)}")
@@ -449,6 +426,8 @@ class PdfExtractor:
                 line = process.stdout.readline()
                 if not line and process.poll() is not None:
                     break
+                sys.stdout.write(line)
+                sys.stdout.flush()
                 output.append(line)
 
             response = ''.join(output)
@@ -517,7 +496,7 @@ class PdfExtractor:
 
     def _extract_code_from_response(self, response: str) -> str:
         """
-        Extrahiert JSON aus einer Ollama-Antwort.
+        Extrahiert JSON aus einer Ollama-Antwort mit verbesserter Robustheit.
 
         Args:
             response: Die vollständige Antwort des Ollama-Modells
@@ -531,30 +510,85 @@ class PdfExtractor:
         # Entferne <think>-Tags, falls vorhanden
         cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL)
 
-        # Extrahiere JSON aus einem Markdown-Codeblock
-        json_pattern = re.compile(r'```(?:json)?\n(.*?)```', re.DOTALL | re.IGNORECASE)
+        # Methode 1: Extrahiere JSON aus einem Markdown-Codeblock
+        json_pattern = re.compile(r'```(?:json)?\s*\n(.*?)\n```', re.DOTALL | re.IGNORECASE)
         matches = json_pattern.findall(cleaned)
 
         if matches:
-            return matches[0].strip()
+            for match in matches:
+                try:
+                    # Versuche, ob es gültiges JSON ist
+                    json.loads(match.strip())
+                    return match.strip()
+                except json.JSONDecodeError:
+                    continue  # Wenn nicht, probiere den nächsten Match
 
-        # Wenn kein Markdown-Block gefunden wurde, suche nach JSON-Array
-        json_array_pattern = re.compile(r'\[\s*{.*}\s*\]', re.DOTALL)
-        array_matches = json_array_pattern.findall(cleaned)
+        # Methode 2: Suche nach JSON-Array mit weniger strengen Kriterien
+        try:
+            # Suche nach Text zwischen eckigen Klammern [...]
+            array_match = re.search(r'\[\s*\{.*\}\s*\]', cleaned, re.DOTALL)
+            if array_match:
+                potential_json = array_match.group(0)
+                json.loads(potential_json)  # Prüfe ob es gültiges JSON ist
+                return potential_json
+        except:
+            pass
 
-        if array_matches:
-            return array_matches[0].strip()
+        # Methode 3: Noch robusterer Ansatz - suche nach allen { } Blöcken
+        try:
+            # Finde alle Teile, die wie JSON-Objekte aussehen
+            all_objects = re.findall(r'\{(?:[^{}]|(?:\{[^{}]*\}))*\}', cleaned, re.DOTALL)
+            for obj_text in all_objects:
+                # Wenn es ein einzelnes Objekt ist, packe es in ein Array
+                try:
+                    obj = json.loads(obj_text)
+                    if isinstance(obj, dict):
+                        return f"[{obj_text}]"
+                except:
+                    pass
+        except:
+            pass
 
-        # Falls kein JSON gefunden wurde, suche nach JSON-Objekt
-        json_object_pattern = re.compile(r'{\s*"[^"]+"\s*:.*}', re.DOTALL)
-        object_matches = json_object_pattern.findall(cleaned)
+        # Fallback: Manuelles Generieren von JSON aus der Antwort
+        try:
+            # Suche nach möglichen Fahrzeugdaten in der Antwort
+            logger.info("Versuche Fahrzeugdaten manuell aus der Antwort zu extrahieren")
 
-        if object_matches:
-            return object_matches[0].strip()
+            # Suche nach Marke und Modell
+            marke_match = re.search(r'Marke:\s*([A-Za-z\-]+)', cleaned)
+            modell_match = re.search(r'Modell:\s*([A-Za-z0-9\s\-\.]+)', cleaned)
 
-        # Falls kein JSON gefunden wurde, gib die gesamte bereinigte Antwort zurück
-        logger.warning("Kein JSON in der Antwort gefunden. Verwende bereinigte Antwort.")
-        return cleaned.strip()
+            if marke_match and modell_match:
+                # Erstelle ein einfaches Fahrzeug-Objekt
+                vehicle = {
+                    "marke": marke_match.group(1).strip(),
+                    "modell": modell_match.group(1).strip()
+                }
+
+                # Suche nach weiteren Daten
+                baujahr_match = re.search(r'Baujahr:\s*(\d{4})', cleaned)
+                if baujahr_match:
+                    vehicle["baujahr"] = int(baujahr_match.group(1))
+
+                km_match = re.search(r'Kilometerstand:\s*(\d+)', cleaned)
+                if km_match:
+                    vehicle["kilometerstand"] = int(km_match.group(1))
+
+                preis_match = re.search(r'Preis:\s*(\d+)', cleaned)
+                if preis_match:
+                    vehicle["auktionspreis"] = int(preis_match.group(1))
+
+                # Zu JSON konvertieren
+                return json.dumps([vehicle])
+        except Exception as e:
+            logger.warning(f"Fehler beim manuellen Extrahieren von Fahrzeugdaten: {str(e)}")
+
+        # Wenn kein JSON gefunden wurde, logge die Antwort für Debugging
+        logger.warning("Kein JSON in der Antwort gefunden. Hier ist ein Auszug der Antwort:")
+        logger.warning(cleaned[:500] + "..." if len(cleaned) > 500 else cleaned)
+
+        # Notfallmaßnahme: Versuche, einen sinnvollen Standardwert zurückzugeben
+        return '[]'  # Leeres Array als Fallback
 
     def _create_extraction_prompt(self, pdf_content: str, more_detailed: bool = False) -> str:
         """
@@ -603,10 +637,7 @@ WICHTIGE ZUSATZANWEISUNGEN:
 - Suche nach Mustern wie "Los-Nr. X" oder fortlaufende Nummerierungen am Zeilenbeginn
 - Wenn eine Fahrgestellnummer im Format "WBA...", "WDD...", "VIN:..." gefunden wird, extrahiere sie
 
-Bei der OCR-Texterkennung können Zeichen falsch erkannt worden sein. Versuche, häufige Fehler zu korrigieren:
-- "0" und "O" werden oft verwechselt
-- "I", "l" und "1" können verwechselt werden
-- Leerzeichen können fehlen oder zusätzlich eingefügt sein"""
+"""
 
         # Anweisung zur JSON-Formatierung
         json_format = """
@@ -862,6 +893,18 @@ Hier ist der Inhalt des Auktionskatalogs:"""
                 standardized['leistung'] = int(round(standardized['leistung_kw'] / 0.735))
             except:
                 pass
+
+        # NEU: Korrektur, wenn PS und kW vertauscht sind
+        if 'leistung' in standardized and 'leistung_kw' in standardized:
+            # Wenn kW größer als PS ist, sind die Werte wahrscheinlich vertauscht
+            if standardized['leistung_kw'] > standardized['leistung']:
+                # Werte tauschen
+                temp = standardized['leistung']
+                standardized['leistung'] = standardized['leistung_kw']
+                standardized['leistung_kw'] = temp
+
+                # Jetzt die Werte nochmal auf Basis ihrer Relation korrigieren
+                standardized['leistung_kw'] = int(round(standardized['leistung'] * 0.735))
 
         return standardized
 

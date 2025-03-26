@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 import subprocess
 import os
+import psutil
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -17,11 +18,11 @@ class DeepSeekConfig:
     API_URL = "http://localhost:11434/api"
 
     # Modellspezifikation
-    MODEL_NAME = "deepseek-r1:32b"
+    MODEL_NAME = "deepseek-r1:14b"  # Default
 
     # Systemanforderungen
-    REQUIRED_RAM_GB = 32
-    REQUIRED_GPU_VRAM_GB = 16
+    REQUIRED_RAM_GB = 16
+    REQUIRED_GPU_VRAM_GB = 8
 
     # Prompts und Templates
     SYSTEM_PROMPT_TEMPLATE = """Du bist ein Experte für Fahrzeugbewertung und Profitabilitätsanalyse auf dem deutschen Markt. 
@@ -80,15 +81,24 @@ class DeepSeekConfig:
 class DeepSeekClient:
     """Client für die Interaktion mit dem DeepSeek-R1 Modell über Ollama"""
 
-    def __init__(self, ensure_running=True):
+    def __init__(self, model_name=None, ensure_running=True):
         """
         Initialisiert den DeepSeek Client.
 
         Args:
+            model_name (str, optional): Name des zu verwendenden Modells
             ensure_running (bool): Ob automatisch überprüft werden soll, dass Ollama läuft
         """
         self.config = DeepSeekConfig()
+
+        # Modellname überschreiben, falls angegeben
+        if model_name:
+            self.config.MODEL_NAME = model_name
+
         self.ensure_running = ensure_running
+
+        if ensure_running:
+            self._check_ollama_running()
 
     def _check_ollama_running(self):
         """
@@ -103,7 +113,7 @@ class DeepSeekClient:
 
             if response.status_code != 200:
                 logger.error("Ollama-Server ist nicht erreichbar.")
-                return False
+                return self._start_ollama()
 
             # Überprüfe, ob das Modell verfügbar ist
             models = response.json().get("models", [])
@@ -111,17 +121,19 @@ class DeepSeekClient:
 
             if not model_exists:
                 logger.warning(f"Modell {self.config.MODEL_NAME} ist nicht verfügbar.")
-                return False
+                # Modell wird automatisch heruntergeladen
+                return self._pull_model()
 
+            logger.info(f"Ollama-Server läuft und Modell {self.config.MODEL_NAME} ist verfügbar.")
             return True
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Fehler bei der Überprüfung des Ollama-Servers: {str(e)}")
-            return False
+            return self._start_ollama()
 
     def _start_ollama(self):
         """
-        Versucht, Ollama zu starten und das Modell zu laden.
+        Versucht, Ollama zu starten.
 
         Returns:
             bool: True wenn Ollama erfolgreich gestartet wurde, sonst False
@@ -140,46 +152,43 @@ class DeepSeekClient:
             # Warte, bis der Server gestartet ist
             for i in range(10):
                 time.sleep(2)
-                if self._check_ollama_running():
-                    logger.info("Ollama-Server wurde erfolgreich gestartet.")
-                    break
+                try:
+                    response = requests.get(f"{self.config.API_URL}/tags")
+                    if response.status_code == 200:
+                        logger.info("Ollama-Server wurde erfolgreich gestartet.")
+                        return self._pull_model()
+                except:
+                    pass
                 logger.info(f"Warte auf Ollama-Server... ({i+1}/10)")
-            else:
-                logger.error("Ollama-Server konnte nicht gestartet werden.")
-                return False
 
-            # Überprüfe, ob das Modell bereits heruntergeladen wurde
-            if not self._check_model_exists():
-                logger.info(f"Modell {self.config.MODEL_NAME} wird heruntergeladen...")
-                pull_cmd = ["ollama", "pull", self.config.MODEL_NAME]
-                result = subprocess.run(pull_cmd, capture_output=True, text=True)
-
-                if result.returncode != 0:
-                    logger.error(f"Fehler beim Herunterladen des Modells: {result.stderr}")
-                    return False
-
-                logger.info(f"Modell {self.config.MODEL_NAME} wurde erfolgreich heruntergeladen.")
-
-            return True
+            logger.error("Ollama-Server konnte nicht gestartet werden.")
+            return False
 
         except Exception as e:
             logger.error(f"Fehler beim Starten von Ollama: {str(e)}")
             return False
 
-    def _check_model_exists(self):
+    def _pull_model(self):
         """
-        Überprüft, ob das DeepSeek-R1 Modell bereits heruntergeladen wurde.
+        Lädt das DeepSeek-R1 Modell herunter, falls es nicht vorhanden ist.
 
         Returns:
-            bool: True wenn das Modell existiert, sonst False
+            bool: True bei Erfolg, False bei Fehler
         """
         try:
-            response = requests.get(f"{self.config.API_URL}/tags")
-            if response.status_code == 200:
-                models = response.json().get("models", [])
-                return any(model.get("name") == self.config.MODEL_NAME for model in models)
-            return False
-        except:
+            logger.info(f"Lade Modell {self.config.MODEL_NAME} herunter...")
+            pull_cmd = ["ollama", "pull", self.config.MODEL_NAME]
+            result = subprocess.run(pull_cmd, capture_output=True, text=True)
+
+            if result.returncode != 0:
+                logger.error(f"Fehler beim Herunterladen des Modells: {result.stderr}")
+                return False
+
+            logger.info(f"Modell {self.config.MODEL_NAME} wurde erfolgreich heruntergeladen.")
+            return True
+
+        except Exception as e:
+            logger.error(f"Fehler beim Herunterladen des Modells: {str(e)}")
             return False
 
     def _generate_response(self, prompt, system_prompt=None, max_retries=3):
@@ -195,9 +204,8 @@ class DeepSeekClient:
             str: Die generierte Antwort oder None bei Fehler
         """
         if self.ensure_running and not self._check_ollama_running():
-            if not self._start_ollama():
-                logger.error("Ollama konnte nicht gestartet werden. Abbruch.")
-                return None
+            logger.error("Ollama ist nicht verfügbar. Abbruch.")
+            return None
 
         # Definiere den Request-Body
         request_data = {
@@ -274,7 +282,7 @@ Profitabilitätskategorie: {vehicle_data.get('profitabilitaet', 'Unbekannt')}"""
         response = self._generate_response(prompt, self.config.SYSTEM_PROMPT_TEMPLATE)
 
         if response:
-            logger.info("Fahrzeuganalyse erfolgreich generiert.")
+            logger.info(f"Fahrzeuganalyse für {vehicle_data.get('marke', '')} {vehicle_data.get('modell', '')} erfolgreich generiert.")
             return response
         else:
             logger.error("Fehler bei der Fahrzeuganalyse.")
@@ -298,6 +306,9 @@ Sehr profitable Fahrzeuge: {summary_data.get('sehr_profitable_fahrzeuge', 0)} ({
 Unprofitable Fahrzeuge: {summary_data.get('unprofitable_fahrzeuge', 0)} ({summary_data.get('unprofitable_prozent', 0):.1f}%)
 Durchschnittliche Gewinnmarge: {summary_data.get('durchschnittliche_gewinnmarge', 0):.2f}%
 Durchschnittlicher ROI: {summary_data.get('durchschnittlicher_roi', 0):.2f}%
+Gesamtgewinn: {summary_data.get('gesamtgewinn', 0):.2f} €
+Gesamtinvestition: {summary_data.get('gesamtinvestition', 0):.2f} €
+Gesamt-ROI: {summary_data.get('gesamt_roi', 0):.2f}%
 
 Bestes Fahrzeug:
 Marke: {summary_data.get('bestes_fahrzeug', {}).get('marke', 'Unbekannt')}
@@ -311,13 +322,16 @@ Marke: {summary_data.get('schlechtestes_fahrzeug', {}).get('marke', 'Unbekannt')
 Modell: {summary_data.get('schlechtestes_fahrzeug', {}).get('modell', 'Unbekannt')}
 Baujahr: {summary_data.get('schlechtestes_fahrzeug', {}).get('baujahr', 'Unbekannt')}
 Gewinnmarge: {summary_data.get('schlechtestes_fahrzeug', {}).get('gewinnmarge', 0):.2f}%
-Nettogewinn: {summary_data.get('schlechtestes_fahrzeug', {}).get('nettogewinn', 0):.2f} €"""
+Nettogewinn: {summary_data.get('schlechtestes_fahrzeug', {}).get('nettogewinn', 0):.2f} €
+
+Saisonale Empfehlung: {summary_data.get('saisonale_empfehlung', 'Keine Information')}"""
 
         # Formatiere die Verteilung der Profitabilitätskategorien
-        distribution_info = "\n".join([
-            f"{category}: {count} Fahrzeuge"
-            for category, count in profitability_distribution.items()
-        ])
+        distribution_lines = []
+        for category, count in profitability_distribution.items():
+            distribution_lines.append(f"{category}: {count} Fahrzeuge")
+
+        distribution_info = "\n".join(distribution_lines)
 
         # Erstelle den Prompt
         prompt = self.config.SUMMARY_PROMPT_TEMPLATE.format(
@@ -346,7 +360,7 @@ Nettogewinn: {summary_data.get('schlechtestes_fahrzeug', {}).get('nettogewinn', 
         Returns:
             dict: Dictionary mit Fahrzeug-IDs als Schlüssel und Analysen als Werte
         """
-        if vehicles_df.empty:
+        if vehicles_df is None or vehicles_df.empty:
             logger.warning("Keine Fahrzeugdaten für die Analyse vorhanden.")
             return {}
 
@@ -372,9 +386,6 @@ Nettogewinn: {summary_data.get('schlechtestes_fahrzeug', {}).get('nettogewinn', 
             dict: Dictionary mit Informationen zu den Systemanforderungen
         """
         try:
-            import psutil
-            import GPUtil
-
             # RAM überprüfen
             ram_gb = round(psutil.virtual_memory().total / (1024**3), 2)
             ram_sufficient = ram_gb >= self.config.REQUIRED_RAM_GB
@@ -382,6 +393,7 @@ Nettogewinn: {summary_data.get('schlechtestes_fahrzeug', {}).get('nettogewinn', 
             # GPU überprüfen
             gpu_info = []
             try:
+                import GPUtil
                 gpus = GPUtil.getGPUs()
                 if gpus:
                     for gpu in gpus:
@@ -414,51 +426,23 @@ Nettogewinn: {summary_data.get('schlechtestes_fahrzeug', {}).get('nettogewinn', 
 
 # Beispielverwendung
 if __name__ == "__main__":
-    try:
-        # Lade Beispieldaten
-        analysis_df = pd.read_csv("fahrzeug_analyse.csv")
+    # Importiere die erforderlichen Module für den Test
+    import json
+    from pathlib import Path
 
-        # Initialisiere DeepSeek-Client
-        ds_client = DeepSeekClient()
+    # Einfacher, schneller Test des Clients
+    client = DeepSeekClient(model_name="deepseek-r1:14b")  # Wähle ein kleineres Modell für schnelleren Test
 
-        # Überprüfe Systemanforderungen
-        system_req = ds_client.check_system_requirements()
-        print(f"Systemanforderungen erfüllt: {system_req.get('overall_sufficient', False)}")
+    # Überprüfe Systemanforderungen
+    system_req = client.check_system_requirements()
+    print(f"Systemanforderungen erfüllt: {system_req.get('overall_sufficient', False)}")
+    print(f"RAM: {system_req.get('ram_gb', 0)} GB (erforderlich: {system_req.get('required_ram_gb', 0)} GB)")
 
-        if not system_req.get('overall_sufficient', False):
-            print("Warnung: Ihr System erfüllt möglicherweise nicht die Anforderungen für DeepSeek-R1.")
-            print(f"RAM: {system_req.get('ram_gb', 0)} GB (erforderlich: {system_req.get('required_ram_gb', 0)} GB)")
-            for gpu in system_req.get('gpu_info', []):
-                print(f"GPU: {gpu.get('name', 'Unbekannt')} mit {gpu.get('memory_total_gb', 0)} GB VRAM")
-            print(f"Erforderlicher VRAM: {system_req.get('required_gpu_vram_gb', 0)} GB")
+    # Einen Test-Prompt senden
+    test_response = client._generate_response("Gib eine kurze Übersicht über den deutschen Automarkt.")
 
-        # Analysiere ein einzelnes Fahrzeug als Beispiel
-        if not analysis_df.empty:
-            sample_vehicle = analysis_df.iloc[0].to_dict()
-            vehicle_analysis = ds_client.analyze_vehicle(sample_vehicle)
-            print("\nBeispielanalyse für ein Fahrzeug:")
-            print(vehicle_analysis)
-
-            # Generiere einen zusammenfassenden Bericht
-            summary_data = {
-                'gesamtanzahl_fahrzeuge': len(analysis_df),
-                'profitable_fahrzeuge': len(analysis_df[analysis_df['nettogewinn'] > 0]),
-                'profitable_prozent': len(analysis_df[analysis_df['nettogewinn'] > 0]) / len(analysis_df) * 100,
-                'sehr_profitable_fahrzeuge': len(analysis_df[analysis_df['gewinnmarge_prozent'] > 20]),
-                'sehr_profitable_prozent': len(analysis_df[analysis_df['gewinnmarge_prozent'] > 20]) / len(analysis_df) * 100,
-                'unprofitable_fahrzeuge': len(analysis_df[analysis_df['nettogewinn'] <= 0]),
-                'unprofitable_prozent': len(analysis_df[analysis_df['nettogewinn'] <= 0]) / len(analysis_df) * 100,
-                'durchschnittliche_gewinnmarge': analysis_df['gewinnmarge_prozent'].mean(),
-                'durchschnittlicher_roi': analysis_df['roi'].mean(),
-                'bestes_fahrzeug': analysis_df.loc[analysis_df['gewinnmarge_prozent'].idxmax()].to_dict(),
-                'schlechtestes_fahrzeug': analysis_df.loc[analysis_df['gewinnmarge_prozent'].idxmin()].to_dict()
-            }
-
-            profitability_distribution = analysis_df['profitabilitaet'].value_counts().to_dict()
-
-            summary_report = ds_client.generate_summary_report(summary_data, profitability_distribution)
-            print("\nZusammenfassender Bericht:")
-            print(summary_report)
-
-    except Exception as e:
-        print(f"Fehler bei der Beispielverwendung: {str(e)}")
+    if test_response:
+        print("\nTest erfolgreich. Antwort:")
+        print(test_response[:200] + "..." if len(test_response) > 200 else test_response)
+    else:
+        print("\nTest fehlgeschlagen.")

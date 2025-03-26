@@ -1,3 +1,4 @@
+# auto_auction_analyzer/dashboard/main.py
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -7,17 +8,16 @@ import sys
 import logging
 import numpy as np
 from pathlib import Path
-from PIL import Image
 import time
+import tempfile
 
 # Pfad zum Projektroot hinzufügen
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Importe aus anderen Modulen
-from pdf_extractor.auction_catalog_extractor import AuctionCatalogExtractor
-from pdf_extractor.ai_pdf_extractor import AIPdfExtractor
-from scraper.mobile_de_scraper import MobileDeScraper
-from data_analysis.analyzer import VehicleProfitabilityAnalyzer
+from pdf_extractor.pdf_extractor import PdfExtractor
+from market_data.market_provider import MarketDataProvider
+from data_analysis.analyzer import VehicleAnalyzer
 from ai_integration.deepseek_client import DeepSeekClient
 
 # Logging-Konfiguration
@@ -50,12 +50,10 @@ class FahrzeugAnalyseDashboard:
         self.init_session_state()
         self.setup_sidebar()
 
-        # Beide Extraktoren initialisieren
-        self.pdf_extractor = AuctionCatalogExtractor()  # Regelbasierter Extraktor
-        self.ai_pdf_extractor = AIPdfExtractor()        # KI-basierter Extraktor
-
-        self.scraper = MobileDeScraper(headless=True)
-        self.analyzer = VehicleProfitabilityAnalyzer()
+        # Module initialisieren
+        self.pdf_extractor = PdfExtractor()
+        self.market_provider = MarketDataProvider()
+        self.analyzer = VehicleAnalyzer()
         self.ai_client = DeepSeekClient()
 
     def setup_page(self):
@@ -178,25 +176,14 @@ class FahrzeugAnalyseDashboard:
         if uploaded_files:
             st.info(f"{len(uploaded_files)} PDF-Dateien wurden hochgeladen.")
 
-            # Option zur Auswahl der Extraktionsmethode
-            extraction_method = st.radio(
-                "Extraktionsmethode wählen:",
-                ["Regelbasiert (schneller)", "KI-basiert (genauer)"]
-            )
-
             if st.button("PDFs verarbeiten", use_container_width=True):
                 with st.spinner("Extrahiere Daten aus PDFs..."):
-                    # Je nach Auswahl die passende Methode verwenden
-                    if extraction_method == "KI-basiert (genauer)":
-                        df = self.ai_pdf_extractor.process_auction_pdfs(uploaded_files)
-                        method_used = "KI"
-                    else:
-                        df = self.pdf_extractor.process_auction_pdfs(uploaded_files)
-                        method_used = "Regelbasiert"
+                    # PDF-Extraktion durchführen
+                    df = self.pdf_extractor.process_auction_pdfs(uploaded_files)
 
                     if not df.empty:
                         st.session_state.pdf_data = df
-                        st.success(f"✅ Daten aus {len(df)} Fahrzeugen erfolgreich mit {method_used}-Extraktor extrahiert!")
+                        st.success(f"✅ Daten aus {len(df)} Fahrzeugen erfolgreich extrahiert!")
 
                         # Zeige extrahierte Daten
                         st.subheader("Extrahierte Fahrzeugdaten")
@@ -222,7 +209,7 @@ class FahrzeugAnalyseDashboard:
                 with st.spinner("Lade Beispieldaten..."):
                     # Beispieldaten erstellen
                     example_data = {
-                        'marke': ['BMW', 'Audi', 'Mercedes', 'Volkswagen', 'Porsche'],
+                        'marke': ['BMW', 'Audi', 'Mercedes-Benz', 'Volkswagen', 'Porsche'],
                         'modell': ['X5', 'A6', 'C-Klasse', 'Golf', '911'],
                         'baujahr': [2018, 2019, 2017, 2020, 2016],
                         'kilometerstand': [75000, 60000, 90000, 45000, 50000],
@@ -298,7 +285,7 @@ class FahrzeugAnalyseDashboard:
         if st.button("Marktdaten abrufen", use_container_width=True):
             with st.spinner("Suche auf mobile.de..."):
                 # Ergebnisse speichern
-                all_market_data = []
+                all_market_data = {}
 
                 # Progress bar
                 progress_bar = st.progress(0)
@@ -315,38 +302,49 @@ class FahrzeugAnalyseDashboard:
                     # Kilometerstand-Toleranz berechnen
                     max_km = vehicle_row['kilometerstand'] * (1 + km_tolerance_percent/100)
 
-                    # Marktdaten abrufen
-                    market_df = self.scraper.scrape_listings(
-                        marke=vehicle_row['marke'],
-                        modell=vehicle_row['modell'],
-                        baujahr=min_year,
-                        max_kilometer=max_km
-                    )
+                    # In Dictionary für Market Provider konvertieren
+                    vehicle_dict = {
+                        'marke': vehicle_row['marke'],
+                        'modell': vehicle_row['modell'],
+                        'baujahr': vehicle_row['baujahr'],
+                        'baujahr_min': min_year,
+                        'kilometerstand': vehicle_row['kilometerstand'],
+                        'kilometerstand_max': max_km
+                    }
 
-                    if not market_df.empty:
-                        # Fahrzeug-ID hinzufügen
-                        market_df['vehicle_id'] = idx
-                        all_market_data.append(market_df)
-                        st.success(f"✅ {len(market_df)} Angebote für {vehicle_row['marke']} {vehicle_row['modell']} gefunden.")
+                    # Marktdaten abrufen
+                    market_data = self.market_provider.get_market_data(vehicle_dict)
+
+                    if market_data and market_data.get('listings'):
+                        all_market_data[idx] = market_data
+                        st.success(f"✅ {len(market_data['listings'])} Angebote für {vehicle_row['marke']} {vehicle_row['modell']} gefunden.")
                     else:
                         st.warning(f"⚠️ Keine Angebote für {vehicle_row['marke']} {vehicle_row['modell']} gefunden.")
 
                     # Progress bar aktualisieren
                     progress_bar.progress((i + 1) / len(selected_indices))
 
-                # Alle Marktdaten kombinieren
+                # Alle Marktdaten speichern
                 if all_market_data:
-                    combined_market_data = pd.concat(all_market_data, ignore_index=True)
-                    st.session_state.market_data = combined_market_data
+                    st.session_state.market_data = all_market_data
 
-                    # Zeige Marktdaten
+                    # Zeige Marktdaten-Zusammenfassung
                     st.subheader("Gesammelte Marktdaten")
-                    st.dataframe(combined_market_data)
 
-                    # Speichere Marktdaten
-                    market_data_path = OUTPUT_DIR / "marktdaten.csv"
-                    combined_market_data.to_csv(market_data_path, index=False)
-                    st.markdown(f"Marktdaten gespeichert unter: `{market_data_path}`")
+                    summary_data = []
+                    for idx, data in all_market_data.items():
+                        vehicle = st.session_state.pdf_data.iloc[idx]
+                        summary_data.append({
+                            'Fahrzeug': f"{vehicle['marke']} {vehicle['modell']} ({vehicle['baujahr']})",
+                            'Angebote': data.get('anzahl_angebote', 0),
+                            'Min. Preis': data.get('marktpreis_min', 'N/A'),
+                            'Max. Preis': data.get('marktpreis_max', 'N/A'),
+                            'Durchschnitt': data.get('marktpreis_mean', 'N/A'),
+                            'Median': data.get('marktpreis_median', 'N/A')
+                        })
+
+                    summary_df = pd.DataFrame(summary_data)
+                    st.dataframe(summary_df)
 
                     # Navigation zum nächsten Schritt
                     st.markdown("---")
@@ -365,12 +363,13 @@ class FahrzeugAnalyseDashboard:
             if st.button("Beispiel-Marktdaten laden", use_container_width=True):
                 with st.spinner("Lade Beispiel-Marktdaten..."):
                     # Beispieldaten erstellen
-                    example_market_data = []
+                    example_market_data = {}
 
                     for idx, row in st.session_state.pdf_data.iterrows():
-                        # Für jedes Fahrzeug 5-10 fiktive Marktangebote erstellen
+                        # Für jedes Fahrzeug fiktive Marktangebote erstellen
                         num_listings = np.random.randint(5, 11)
 
+                        listings = []
                         for _ in range(num_listings):
                             # Zufällige Variation des Preises
                             price_variation = np.random.uniform(0.8, 1.3)
@@ -385,26 +384,49 @@ class FahrzeugAnalyseDashboard:
 
                             listing = {
                                 'title': f"{row['marke']} {row['modell']}",
-                                'marktpreis': market_price,
+                                'preis': market_price,
                                 'baujahr': year,
                                 'kilometerstand': mileage,
                                 'kraftstoff': row['kraftstoff'],
-                                'leistung_kw': row['leistung'],
-                                'url': f"https://www.mobile.de/example/{idx}_{np.random.randint(1000, 9999)}",
-                                'vehicle_id': idx
+                                'leistung_kw': int(row['leistung'] * 0.735),
+                                'url': f"https://www.example.com/vehicle/{idx}_{np.random.randint(1000, 9999)}"
                             }
+                            listings.append(listing)
 
-                            example_market_data.append(listing)
+                        # Berechne Statistiken
+                        prices = [listing['preis'] for listing in listings]
 
-                    # DataFrame erstellen
-                    market_df = pd.DataFrame(example_market_data)
-                    st.session_state.market_data = market_df
+                        example_market_data[idx] = {
+                            'quelle': 'Beispieldaten',
+                            'timestamp': pd.Timestamp.now().isoformat(),
+                            'anzahl_angebote': num_listings,
+                            'marktpreis_min': min(prices),
+                            'marktpreis_max': max(prices),
+                            'marktpreis_mean': sum(prices) / len(prices),
+                            'marktpreis_median': sorted(prices)[len(prices)//2],
+                            'listings': listings
+                        }
 
+                    st.session_state.market_data = example_market_data
                     st.success("✅ Beispiel-Marktdaten erfolgreich geladen!")
 
-                    # Zeige Marktdaten
+                    # Zeige Marktdaten-Zusammenfassung
                     st.subheader("Beispiel-Marktdaten")
-                    st.dataframe(market_df)
+
+                    summary_data = []
+                    for idx, data in example_market_data.items():
+                        vehicle = st.session_state.pdf_data.iloc[idx]
+                        summary_data.append({
+                            'Fahrzeug': f"{vehicle['marke']} {vehicle['modell']} ({vehicle['baujahr']})",
+                            'Angebote': data.get('anzahl_angebote', 0),
+                            'Min. Preis': data.get('marktpreis_min', 'N/A'),
+                            'Max. Preis': data.get('marktpreis_max', 'N/A'),
+                            'Durchschnitt': data.get('marktpreis_mean', 'N/A'),
+                            'Median': data.get('marktpreis_median', 'N/A')
+                        })
+
+                    summary_df = pd.DataFrame(summary_data)
+                    st.dataframe(summary_df)
 
                     # Navigation zum nächsten Schritt
                     st.markdown("---")
@@ -446,10 +468,19 @@ class FahrzeugAnalyseDashboard:
                 self.analyzer.parameters['min_profit_amount'] = st.session_state.min_profit_amount
 
                 # Analyse durchführen
-                analysis_df, summary, visualizations = self.analyzer.analyze(
+                analysis_df, summary = self.analyzer.analyze_vehicles(
                     st.session_state.pdf_data,
                     st.session_state.market_data
                 )
+
+                # Visualisierungen erstellen
+                if not analysis_df.empty:
+                    visualizations = self.analyzer.generate_visualizations(
+                        analysis_df,
+                        output_dir=str(OUTPUT_DIR)
+                    )
+                else:
+                    visualizations = {}
 
                 # Ergebnisse speichern
                 st.session_state.analysis_data = analysis_df
@@ -628,9 +659,12 @@ class FahrzeugAnalyseDashboard:
                     st.subheader("Visualisierungen")
 
                     # Zeige alle Visualisierungen
-                    for viz_name, viz_path in st.session_state.visualizations.items():
-                        st.subheader(viz_name.replace('_', ' ').title())
-                        st.image(viz_path)
+                    if st.session_state.visualizations:
+                        for viz_name, viz_path in st.session_state.visualizations.items():
+                            st.subheader(viz_name.replace('_', ' ').title())
+                            st.image(viz_path)
+                    else:
+                        st.info("Keine Visualisierungen verfügbar.")
 
                 # Navigation zum nächsten Schritt
                 st.markdown("---")
@@ -718,7 +752,7 @@ class FahrzeugAnalyseDashboard:
             # Erstelle eine Liste von Fahrzeugen zur Auswahl
             vehicles = []
             for idx, row in st.session_state.analysis_data.iterrows():
-                vehicle_name = f"{row['marke']} {row['modell']} ({row['baujahr']}) - {row['profitabilitaet']}"
+                vehicle_name = f"{row['marke']} {row['modell']} ({row['baujahr']}) - {row.get('profitabilitaet', 'Unbekannt')}"
                 vehicles.append({"name": vehicle_name, "idx": idx})
 
             selected_vehicle = st.selectbox(
@@ -821,14 +855,14 @@ class FahrzeugAnalyseDashboard:
 
             if st.button("Einzelanalysen als PDF exportieren", use_container_width=True):
                 st.info("Diese Funktion würde die Einzelanalysen als PDF exportieren.")
-                st.warning("Diese Funktion ist in der Beispielimplementierung nicht vollständig implementiert.")
+                st.warning("Diese Funktion ist in der aktuellen Version noch nicht implementiert.")
 
         if 'ai_summary' in st.session_state and st.session_state.ai_summary:
             exportable = True
 
             if st.button("Gesamtanalyse als PDF exportieren", use_container_width=True):
                 st.info("Diese Funktion würde die Gesamtanalyse als PDF exportieren.")
-                st.warning("Diese Funktion ist in der Beispielimplementierung nicht vollständig implementiert.")
+                st.warning("Diese Funktion ist in der aktuellen Version noch nicht implementiert.")
 
         if not exportable:
             st.info("Führen Sie zuerst eine KI-Analyse durch, um Exportoptionen zu erhalten.")

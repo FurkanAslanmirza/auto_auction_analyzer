@@ -1,16 +1,19 @@
+#!/usr/bin/env python3
 # auto_auction_analyzer/main.py
 import os
 import logging
 import argparse
 from pathlib import Path
 import pandas as pd
-
-# Module importieren
-from pdf_extractor.extractor import VehicleDataExtractor
-from scraper.mobile_de_scraper import MobileDeScraper
-from data_analysis.analyzer import VehicleProfitabilityAnalyzer
-from ai_integration.deepseek_client import DeepSeekClient
 import subprocess
+import sys
+
+# Import fortschrittlicher Versionen der Module
+from pdf_extractor.enhanced_extractor import EnhancedPdfExtractor
+from market_data.enhanced_market_provider import EnhancedMarketDataProvider
+from data_analysis.enhanced_analyzer import EnhancedVehicleAnalyzer
+from ai_integration.deepseek_client import DeepSeekClient
+from utils.config import OUTPUT_DIR, DATA_DIR
 
 # Logging konfigurieren
 logging.basicConfig(
@@ -38,8 +41,8 @@ class AutoAuctionAnalyzer:
         """
         # Standardkonfiguration
         self.config = {
-            'pdf_dir': './pdf_files',
-            'output_dir': './output',
+            'pdf_dir': str(DATA_DIR / 'pdf_files'),
+            'output_dir': str(OUTPUT_DIR),
             'min_profit_margin': 15,
             'min_profit_amount': 2000,
             'headless_browser': True,
@@ -57,10 +60,10 @@ class AutoAuctionAnalyzer:
         # Ausgabeverzeichnis erstellen, falls nicht vorhanden
         os.makedirs(self.config['output_dir'], exist_ok=True)
 
-        # Module initialisieren
-        self.pdf_extractor = VehicleDataExtractor()
-        self.scraper = MobileDeScraper(headless=self.config['headless_browser'])
-        self.analyzer = VehicleProfitabilityAnalyzer()
+        # Module initialisieren mit optimierten Versionen
+        self.pdf_extractor = EnhancedPdfExtractor()
+        self.market_provider = EnhancedMarketDataProvider()
+        self.analyzer = EnhancedVehicleAnalyzer()
 
         # Analyseeinstellungen anpassen
         self.analyzer.parameters['min_profit_margin_percent'] = self.config['min_profit_margin']
@@ -81,6 +84,7 @@ class AutoAuctionAnalyzer:
                 logger.error(f"Dashboard-Datei nicht gefunden: {dashboard_path}")
                 return False
 
+            # Starte das Dashboard als Subprocess
             subprocess.Popen(["streamlit", "run", str(dashboard_path)],
                              shell=False,
                              stdout=subprocess.PIPE)
@@ -101,104 +105,81 @@ class AutoAuctionAnalyzer:
         """
         try:
             logger.info(f"Extrahiere Daten aus PDFs in {self.config['pdf_dir']}...")
-            pdf_data = self.pdf_extractor.process_directory(self.config['pdf_dir'])
-
-            if pdf_data.empty:
-                logger.warning("Keine Daten aus PDFs extrahiert.")
-                return None
-
-            # Speichern der extrahierten Daten
-            pdf_output_path = Path(self.config['output_dir']) / "extracted_vehicles.csv"
-            pdf_data.to_csv(pdf_output_path, index=False)
-            logger.info(f"Extrahierte Daten gespeichert in {pdf_output_path}")
-
-            return pdf_data
-
+            return self.pdf_extractor.process_directory(self.config['pdf_dir'])
         except Exception as e:
             logger.error(f"Fehler bei der PDF-Extraktion: {str(e)}")
             return None
 
-    def scrape_market_data(self, vehicle_df):
+    def get_market_data(self, vehicle_df):
         """
-        Scrapt Marktdaten von mobile.de für die gegebenen Fahrzeuge.
+        Holt Marktdaten für die gegebenen Fahrzeuge.
 
         Args:
             vehicle_df (pd.DataFrame): DataFrame mit Fahrzeugdaten
 
         Returns:
-            pd.DataFrame: DataFrame mit Marktdaten oder None bei Fehler
+            dict: Marktdaten oder None bei Fehler
         """
         if vehicle_df is None or vehicle_df.empty:
-            logger.error("Keine Fahrzeugdaten für das Scraping vorhanden.")
+            logger.error("Keine Fahrzeugdaten für die Marktdatenabfrage vorhanden.")
             return None
 
         try:
-            logger.info("Starte Scraping von mobile.de...")
-            all_market_data = []
+            logger.info("Starte Marktdatenabfrage...")
 
-            for idx, vehicle in vehicle_df.iterrows():
-                logger.info(f"Suche nach: {vehicle['marke']} {vehicle['modell']} ({vehicle['baujahr']})")
+            # Konvertiere DataFrame zu Liste von Fahrzeugdaten
+            vehicles = vehicle_df.to_dict('records')
 
-                # Baujahr-Toleranz berechnen
-                min_year = vehicle['baujahr'] - self.config['year_tolerance']
+            # Marktdaten abrufen mit verbesserten Parametern
+            market_data = self.market_provider.get_market_data_for_vehicles(
+                vehicles=vehicles,
+                force_refresh=False,  # Cache nutzen wenn verfügbar
+                parallel=True  # Parallele Verarbeitung
+            )
 
-                # Kilometerstand-Toleranz berechnen
-                max_km = vehicle['kilometerstand'] * (1 + self.config['km_tolerance_percent']/100)
+            if market_data:
+                logger.info(f"Marktdaten für {len(market_data)} Fahrzeuge erfolgreich abgerufen.")
 
-                # Marktdaten abrufen
-                market_df = self.scraper.scrape_listings(
-                    marke=vehicle['marke'],
-                    modell=vehicle['modell'],
-                    baujahr=min_year,
-                    max_kilometer=max_km
-                )
+                # Speichern für spätere Verwendung
+                market_data_path = Path(self.config['output_dir']) / "market_data.json"
+                from utils.helpers import FileHelper
+                FileHelper.save_as_json(market_data, str(market_data_path))
 
-                if not market_df.empty:
-                    # Fahrzeug-ID hinzufügen
-                    market_df['vehicle_id'] = idx
-                    all_market_data.append(market_df)
-                    logger.info(f"✓ {len(market_df)} Angebote für {vehicle['marke']} {vehicle['modell']} gefunden.")
-                else:
-                    logger.warning(f"Keine Angebote für {vehicle['marke']} {vehicle['modell']} gefunden.")
-
-            # Alle Marktdaten kombinieren
-            if all_market_data:
-                combined_market_data = pd.concat(all_market_data, ignore_index=True)
-
-                # Speichern der Marktdaten
-                market_output_path = Path(self.config['output_dir']) / "market_data.csv"
-                combined_market_data.to_csv(market_output_path, index=False)
-                logger.info(f"Marktdaten gespeichert in {market_output_path}")
-
-                return combined_market_data
+                return market_data
             else:
                 logger.warning("Keine Marktdaten konnten abgerufen werden.")
                 return None
 
         except Exception as e:
-            logger.error(f"Fehler beim Scraping der Marktdaten: {str(e)}")
+            logger.error(f"Fehler bei der Marktdatenabfrage: {str(e)}")
             return None
 
-    def analyze_data(self, vehicle_df, market_df):
+    def analyze_data(self, vehicle_df, market_data):
         """
         Analysiert die Fahrzeug- und Marktdaten.
 
         Args:
             vehicle_df (pd.DataFrame): DataFrame mit Fahrzeugdaten
-            market_df (pd.DataFrame): DataFrame mit Marktdaten
+            market_data (dict): Marktdaten, indiziert nach Fahrzeug-ID
 
         Returns:
             tuple: (analysis_df, summary, visualizations) oder (None, None, None) bei Fehler
         """
-        if vehicle_df is None or vehicle_df.empty or market_df is None or market_df.empty:
+        if vehicle_df is None or vehicle_df.empty or market_data is None:
             logger.error("Keine Daten für die Analyse vorhanden.")
             return None, None, None
 
         try:
             logger.info("Analysiere Daten...")
-            analysis_df, summary, visualizations = self.analyzer.analyze(vehicle_df, market_df)
+            analysis_df, summary = self.analyzer.analyze_vehicles(vehicle_df, market_data)
 
             if analysis_df is not None and not analysis_df.empty:
+                # Visualisierungen erstellen
+                visualizations = self.analyzer.generate_visualizations(
+                    analysis_df,
+                    output_dir=self.config['output_dir']
+                )
+
                 # Speichern der Analyseergebnisse
                 analysis_output_path = Path(self.config['output_dir']) / "analysis_results.csv"
                 analysis_df.to_csv(analysis_output_path, index=False)
@@ -215,7 +196,7 @@ class AutoAuctionAnalyzer:
 
     def generate_ai_recommendations(self, analysis_df, summary):
         """
-        Generiert KI-basierte Empfehlungen mit DeepSeek-R1.
+        Generiert KI-basierte Empfehlungen.
 
         Args:
             analysis_df (pd.DataFrame): DataFrame mit Analyseergebnissen
@@ -236,13 +217,10 @@ class AutoAuctionAnalyzer:
             self.ai_client = DeepSeekClient()
 
         try:
-            # Überprüfe Systemanforderungen
+            # Systemanforderungen überprüfen
             system_req = self.ai_client.check_system_requirements()
             if not system_req.get('overall_sufficient', False):
-                logger.warning("System erfüllt möglicherweise nicht alle Anforderungen für DeepSeek-R1.")
-                logger.warning(f"RAM: {system_req.get('ram_gb', 0)} GB (erforderlich: {system_req.get('required_ram_gb', 0)} GB)")
-                for gpu in system_req.get('gpu_info', []):
-                    logger.warning(f"GPU: {gpu.get('name', 'Unbekannt')} mit {gpu.get('memory_total_gb', 0)} GB VRAM")
+                logger.warning("System erfüllt möglicherweise nicht alle Anforderungen für DeepSeek.")
 
             # Einzelanalysen für Fahrzeuge
             logger.info("Generiere KI-Analysen für einzelne Fahrzeuge...")
@@ -257,19 +235,12 @@ class AutoAuctionAnalyzer:
             ai_output_dir = Path(self.config['output_dir']) / "ai_recommendations"
             ai_output_dir.mkdir(exist_ok=True)
 
-            # Speichere Einzelanalysen
-            for vehicle_id, data in vehicle_analyses.items():
-                analysis_path = ai_output_dir / f"{vehicle_id}_analysis.txt"
-                with open(analysis_path, 'w', encoding='utf-8') as f:
-                    f.write(data['analysis'])
-
             # Speichere Gesamtanalyse
             summary_path = ai_output_dir / "summary_report.txt"
             with open(summary_path, 'w', encoding='utf-8') as f:
                 f.write(summary_report)
 
             logger.info(f"KI-Empfehlungen gespeichert in {ai_output_dir}")
-
             return vehicle_analyses, summary_report
 
         except Exception as e:
@@ -286,30 +257,31 @@ class AutoAuctionAnalyzer:
         try:
             # 1. PDF-Extraktion
             vehicle_df = self.extract_from_pdfs()
-            if vehicle_df is None:
+            if vehicle_df is None or vehicle_df.empty:
+                logger.error("Keine Fahrzeugdaten extrahiert.")
                 return False
 
-            # 2. Market-Scraping
-            market_df = self.scrape_market_data(vehicle_df)
-            if market_df is None:
+            # 2. Market-Daten
+            market_data = self.get_market_data(vehicle_df)
+            if market_data is None:
+                logger.error("Keine Marktdaten abgerufen.")
                 return False
 
             # 3. Datenanalyse
-            analysis_df, summary, visualizations = self.analyze_data(vehicle_df, market_df)
+            analysis_df, summary, visualizations = self.analyze_data(vehicle_df, market_data)
             if analysis_df is None:
+                logger.error("Analyse fehlgeschlagen.")
                 return False
 
             # 4. KI-Empfehlungen
             if self.config['use_ai']:
                 vehicle_analyses, summary_report = self.generate_ai_recommendations(analysis_df, summary)
-
                 if vehicle_analyses is None or summary_report is None:
                     logger.warning("KI-Empfehlungen konnten nicht generiert werden.")
                     # Wir kehren hier nicht zurück, da die grundlegende Analyse erfolgreich war
 
             logger.info("Vollständige Analyse erfolgreich abgeschlossen!")
             logger.info(f"Ergebnisse gespeichert in {self.config['output_dir']}")
-
             return True
 
         except Exception as e:

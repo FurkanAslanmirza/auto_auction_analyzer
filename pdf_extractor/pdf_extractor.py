@@ -1,4 +1,4 @@
-# auto_auction_analyzer/pdf_extractor/enhanced_extractor.py
+# auto_auction_analyzer/pdf_extractor/pdf_extractor.py
 import pdfplumber
 import re
 import pandas as pd
@@ -9,24 +9,24 @@ import json
 import os
 import tempfile
 import io
-import fitz  # PyMuPDF
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 import shutil
 import traceback
+import subprocess
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class EnhancedPdfExtractor:
+class PdfExtractor:
     """
-    Verbesserte Klasse zur Extraktion von Fahrzeugdaten aus Auktionskatalogen.
+    Optimierte Klasse zur Extraktion von Fahrzeugdaten aus Auktionskatalogen.
     Kombiniert regelbasierte und KI-gestützte Methoden mit robuster Fehlerbehandlung.
     """
 
     def __init__(self, templates_dir=None, ollama_model="deepseek-r1:14b"):
         """
-        Initialisiert den verbesserten PDF-Extraktor.
+        Initialisiert den PDF-Extraktor.
 
         Args:
             templates_dir (str, optional): Verzeichnis mit Extraktions-Templates
@@ -35,16 +35,7 @@ class EnhancedPdfExtractor:
         self.templates_dir = templates_dir or os.path.join(os.path.dirname(__file__), "templates")
         self.templates = self._load_templates()
         self.ollama_model = ollama_model
-
-        # Importiere den regelbasierten Extraktor für Fallback
-        try:
-            from auction_catalog_extractor import AuctionCatalogExtractor
-            self.rule_based_extractor = AuctionCatalogExtractor()
-        except ImportError:
-            logger.warning("Regelbasierter Extraktor nicht verfügbar. Wird erstellt.")
-            # Erstelle eine Basisimplementierung
-            from pdf_extractor.extractor import VehicleDataExtractor
-            self.rule_based_extractor = VehicleDataExtractor()
+        logger.info(f"PDF-Extraktor initialisiert mit Ollama-Modell: {ollama_model}")
 
     def _load_templates(self) -> dict:
         """
@@ -122,7 +113,7 @@ class EnhancedPdfExtractor:
             # Schritt 4: Wenn die KI-Extraktion keine validen Ergebnisse liefert,
             # versuche es mit einer robusteren OCR-basierten Methode
             if not valid_ai_results:
-                logger.info("Versuche OCR-basierte Extraktion...")
+                logger.info("Versuche OCR-basierte Extraktion als letzten Fallback...")
                 ocr_content = self._extract_with_ocr(pdf_path)
                 return self._extract_with_ollama(ocr_content, more_detailed=True)
 
@@ -153,9 +144,11 @@ class EnhancedPdfExtractor:
                 # Prüfe, ob zumindest die erste Seite Text enthält
                 first_page_text = pdf.pages[0].extract_text()
                 if not first_page_text or len(first_page_text) < 10:
-                    logger.warning(f"Erste PDF-Seite enthält keinen Text: {pdf_path}")
-                    # Dies könnte immer noch ein gültiges PDF sein (z.B. mit Bildern),
-                    # daher Rückgabe True
+                    logger.warning(f"Erste PDF-Seite enthält möglicherweise keinen Text: {pdf_path}")
+                    # Es könnte immer noch ein gültiges PDF sein, prüfe auf Bilder/Tabellen
+                    first_page_tables = pdf.pages[0].extract_tables()
+                    if not first_page_tables:
+                        logger.warning(f"Keine Tabellen auf der ersten Seite gefunden: {pdf_path}")
 
             return True
         except Exception as e:
@@ -173,17 +166,99 @@ class EnhancedPdfExtractor:
             List[Dict[str, Any]]: Liste von extrahierten Fahrzeugdaten
         """
         try:
-            # Verwende den regelbasierten Extraktor
-            vehicles = self.rule_based_extractor.extract_from_pdf(pdf_path)
+            vehicles = []
+            with pdfplumber.open(pdf_path) as pdf:
+                # Extrahiere Text aus allen Seiten
+                all_text = ""
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if text:
+                        all_text += text + "\n"
 
-            # Konvertiere in ein einheitliches Format
-            standardized_vehicles = []
-            for vehicle in vehicles:
-                # Konvertiere Typen und standardisiere Schlüssel
-                standardized = self._standardize_vehicle_data(vehicle)
-                standardized_vehicles.append(standardized)
+                # Normale Zeilenumbrüche
+                all_text = re.sub(r'\n+', '\n', all_text)
+                lines = all_text.split('\n')
 
-            return standardized_vehicles
+                current_vehicle = {}
+                # Mehrere Muster für verschiedene Formate
+                patterns = [
+                    # Muster 1: Startet mit Nummer, enthält Marke, Modell, PS, kW
+                    r'^\s*(\d+)\s+([A-Za-z\-]+)\s+(.+?)\s+(\d+)\s+(\d+)\s+([A-Za-z]{3})\s+(\d{2})\s+(\d+)',
+
+                    # Muster 2: Mercedes-Benz Format
+                    r'Mercedes-?\s*Benz\s+([A-Za-z0-9\s\-\.]+)\s+(\d+)\s+(\d+)\s+([A-Za-z]{3})\s+(\d{2})',
+
+                    # Muster 3: Vereinfachtes Format mit Marke und Modell
+                    r'([A-Za-z\-]+)\s+([A-Za-z0-9\s\-\.]+)\s+(\d+)\s+(\d+)\s+([A-Za-z]{3})\s+(\d{2})'
+                ]
+
+                # Preismuster
+                price_pattern = r'(\d+[\.,]\d+)\s*(?:€|EUR|Netto)'
+
+                for i, line in enumerate(lines):
+                    # Überprüfe jedes Muster
+                    for pattern_idx, pattern in enumerate(patterns):
+                        match = re.search(pattern, line)
+                        if match:
+                            # Wenn wir ein vorheriges Fahrzeug haben, füge es zur Liste hinzu
+                            if current_vehicle and 'marke' in current_vehicle:
+                                vehicles.append(current_vehicle)
+                                current_vehicle = {}
+
+                            # Extrahiere Daten basierend auf dem Muster
+                            if pattern_idx == 0:  # Muster 1
+                                current_vehicle['nummer'] = match.group(1)
+                                current_vehicle['marke'] = match.group(2)
+                                current_vehicle['modell'] = match.group(3).strip()
+                                current_vehicle['leistung'] = int(match.group(4))
+                                current_vehicle['leistung_kw'] = int(match.group(5))
+                                # Konvertiere Monat/Jahr in Baujahr
+                                jahr = match.group(7)
+                                current_vehicle['baujahr'] = 2000 + int(jahr) if int(jahr) < 50 else 1900 + int(jahr)
+                                current_vehicle['kilometerstand'] = int(match.group(8))
+
+                            elif pattern_idx == 1:  # Muster 2 - Mercedes-Benz
+                                current_vehicle['marke'] = "Mercedes-Benz"
+                                current_vehicle['modell'] = match.group(1).strip()
+                                current_vehicle['leistung'] = int(match.group(2))
+                                current_vehicle['leistung_kw'] = int(match.group(3))
+                                # Konvertiere Monat/Jahr in Baujahr
+                                jahr = match.group(5)
+                                current_vehicle['baujahr'] = 2000 + int(jahr) if int(jahr) < 50 else 1900 + int(jahr)
+
+                            elif pattern_idx == 2:  # Muster 3
+                                current_vehicle['marke'] = match.group(1)
+                                current_vehicle['modell'] = match.group(2).strip()
+                                current_vehicle['leistung'] = int(match.group(3))
+                                current_vehicle['leistung_kw'] = int(match.group(4))
+                                # Konvertiere Monat/Jahr in Baujahr
+                                jahr = match.group(6)
+                                current_vehicle['baujahr'] = 2000 + int(jahr) if int(jahr) < 50 else 1900 + int(jahr)
+
+                            # Suche nach Preis in dieser oder nächsten Zeile
+                            price_match = re.search(price_pattern, line)
+                            if price_match:
+                                price = price_match.group(1).replace('.', '').replace(',', '.')
+                                current_vehicle['auktionspreis'] = float(price)
+                            elif i < len(lines) - 1:
+                                price_match = re.search(price_pattern, lines[i+1])
+                                if price_match:
+                                    price = price_match.group(1).replace('.', '').replace(',', '.')
+                                    current_vehicle['auktionspreis'] = float(price)
+
+                            break  # Wenn ein Muster passt, keine weiteren prüfen
+
+                # Das letzte Fahrzeug auch hinzufügen
+                if current_vehicle and 'marke' in current_vehicle:
+                    vehicles.append(current_vehicle)
+
+                # Standardisiere alle extrahierten Fahrzeuge
+                standardized_vehicles = []
+                for vehicle in vehicles:
+                    standardized = self._standardize_vehicle_data(vehicle)
+                    standardized_vehicles.append(standardized)
+
+                return standardized_vehicles
 
         except Exception as e:
             logger.error(f"Fehler bei der regelbasierten Extraktion: {str(e)}")
@@ -235,8 +310,9 @@ class EnhancedPdfExtractor:
                             if table_text:
                                 full_content.append(f"Tabelle {j+1}:\n" + "\n".join(table_text))
 
-            # Methode 2: Verwende PyMuPDF (fitz) als Backup für zusätzliche Strukturinformationen
+            # Methode 2: Versuche PyMuPDF als Backup für zusätzliche Strukturinformationen
             try:
+                import fitz  # PyMuPDF
                 with fitz.open(pdf_path) as doc:
                     full_content.append("\n=== ZUSÄTZLICHE STRUKTURDATEN ===\n")
 
@@ -266,6 +342,8 @@ class EnhancedPdfExtractor:
                             if block_texts:
                                 full_content.append(f"--- STRUKTURIERTER TEXT SEITE {page_number} ---\n")
                                 full_content.append("\n\n".join(block_texts))
+            except ImportError:
+                logger.info("PyMuPDF nicht verfügbar, überspringe strukturierte Textextraktion")
             except Exception as e:
                 logger.warning(f"PyMuPDF Extraktion fehlgeschlagen: {str(e)}")
 
@@ -280,6 +358,7 @@ class EnhancedPdfExtractor:
     def _extract_with_ocr(self, pdf_path: str) -> str:
         """
         Extrahiert Text aus einem PDF mittels OCR für bessere Erkennung.
+        Versucht zuerst pytesseract zu verwenden, mit Fallback-Optionen.
 
         Args:
             pdf_path (str): Pfad zur PDF-Datei
@@ -287,53 +366,46 @@ class EnhancedPdfExtractor:
         Returns:
             str: Mit OCR extrahierter Text
         """
+        content = ["=== OCR-EXTRAHIERTER TEXT ==="]
+
+        # Versuche mit pytesseract
         try:
-            # Prüfe, ob pytesseract vorhanden ist
             import pytesseract
             from pdf2image import convert_from_path
-
-            content = ["=== OCR-EXTRAHIERTER TEXT ==="]
 
             # Konvertiere PDF-Seiten zu Bildern
             images = convert_from_path(pdf_path)
 
             for i, image in enumerate(images):
                 page_number = i + 1
-
                 # OCR auf dem Bild ausführen
                 text = pytesseract.image_to_string(image, lang='deu+eng')
                 if text:
                     content.append(f"=== SEITE {page_number} OCR ===\n{text}")
 
-                # Tabellenextraktion mittels OCR
-                tables = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
-
-                # Versuche, Tabellen zu rekonstruieren (vereinfachte Version)
-                if tables and 'text' in tables:
-                    table_content = []
-                    current_line = []
-                    current_line_num = -1
-
-                    for i in range(len(tables['text'])):
-                        if tables['text'][i].strip():
-                            if tables['line_num'][i] != current_line_num:
-                                if current_line:
-                                    table_content.append(" | ".join(current_line))
-                                current_line = []
-                                current_line_num = tables['line_num'][i]
-                            current_line.append(tables['text'][i])
-
-                    if current_line:
-                        table_content.append(" | ".join(current_line))
-
-                    if table_content:
-                        content.append(f"=== TABELLEN SEITE {page_number} OCR ===\n" + "\n".join(table_content))
-
             return "\n\n".join(content)
 
         except ImportError:
-            logger.warning("pytesseract oder pdf2image nicht installiert. OCR wird übersprungen.")
-            return "OCR nicht verfügbar. Benötigte Pakete: pytesseract, pdf2image."
+            logger.warning("pytesseract nicht installiert, versuche Alternative...")
+
+            # Fallback: Verwende Text-Extraktion mit alternativen Methoden
+            try:
+                import subprocess
+                # Versuche pdftotext (Teil von poppler-utils)
+                result = subprocess.run(
+                    ["pdftotext", "-layout", pdf_path, "-"],
+                    capture_output=True, text=True, check=False
+                )
+                if result.returncode == 0 and result.stdout:
+                    content.append("=== PDFTOTEXT EXTRAKTION ===")
+                    content.append(result.stdout)
+                    return "\n\n".join(content)
+            except Exception:
+                pass
+
+            # Letzte Option: Nachricht zurückgeben, dass OCR nicht verfügbar ist
+            return "OCR nicht verfügbar. Installieren Sie 'pytesseract' und 'pdf2image' für bessere Ergebnisse."
+
         except Exception as e:
             logger.error(f"Fehler bei der OCR-Extraktion: {str(e)}")
             return f"OCR-Fehler: {str(e)}"
@@ -349,42 +421,46 @@ class EnhancedPdfExtractor:
         Returns:
             Die Antwort des Ollama-Modells
         """
-        import subprocess
-        import sys
-
         cmd = ["ollama", "run", self.ollama_model]
         if max_tokens:
             cmd.extend(["--max-tokens", str(max_tokens)])
 
         logger.info(f"Starte Ollama-Prozess mit Modell {self.ollama_model}")
 
-        process = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            bufsize=1
-        )
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                bufsize=1
+            )
 
-        process.stdin.write(prompt + "\n")
-        process.stdin.close()
+            process.stdin.write(prompt + "\n")
+            process.stdin.close()
 
-        logger.info("Prompt an Ollama gesendet, warte auf Antwort...")
+            logger.info("Prompt an Ollama gesendet, warte auf Antwort...")
 
-        output = []
-        while True:
-            line = process.stdout.readline()
-            if not line and process.poll() is not None:
-                break
-            # Live-Ausgabe anzeigen, wenn aktiviert
-            output.append(line)
+            output = []
+            while True:
+                line = process.stdout.readline()
+                if not line and process.poll() is not None:
+                    break
+                output.append(line)
 
-        response = ''.join(output)
-        logger.info(f"Ollama-Antwort erhalten: {len(response)} Zeichen")
-        return response
+            response = ''.join(output)
+            logger.info(f"Ollama-Antwort erhalten: {len(response)} Zeichen")
+            return response
+
+        except FileNotFoundError:
+            logger.error("Ollama wurde nicht gefunden. Bitte stellen Sie sicher, dass Ollama installiert ist.")
+            return "Fehler: Ollama ist nicht installiert oder nicht im Pfad."
+        except Exception as e:
+            logger.error(f"Fehler bei der Ausführung von Ollama: {str(e)}")
+            return f"Fehler bei der Ausführung von Ollama: {str(e)}"
 
     def _extract_with_ollama(self, pdf_content: str, more_detailed: bool = False) -> List[Dict[str, Any]]:
         """
@@ -511,21 +587,7 @@ Beachte folgende Punkte bei der Extraktion:
 2. Bei Datumsangaben wie "Nov 23" oder "Mär 19" handelt es sich um Monat und Jahr der Erstzulassung
 3. Konvertiere das Baujahr immer in ein vierstelliges Jahr (z.B. "23" → 2023, "19" → 2019)
 4. Analysiere besonders Tabellen genau, da sie oft die strukturierten Fahrzeugdaten enthalten
-5. Extrahiere nur tatsächlich vorhandene Fahrzeuge und erfinde keine Daten
-
-Formatiere deine Antwort als JSON-Array mit diesen Feldern:
-- nummer: Losnummer oder ID des Fahrzeugs
-- marke: Herstellername (z.B. "BMW", "Mercedes-Benz")
-- modell: Modellbezeichnung
-- leistung: PS-Wert als Zahl
-- leistung_kw: Leistung in kW als Zahl
-- baujahr: 4-stelliges Jahr
-- kilometerstand: Kilometerstand als Zahl ohne Einheit
-- auktionspreis: Preis als Zahl ohne Währungssymbol oder Tausendertrennzeichen
-- mwst: MwSt-Status ("Netto", "Brutto", "§25a")
-- kraftstoff: Kraftstoffart (falls angegeben)
-- ausstattung: Liste der Ausstattungsmerkmale (falls angegeben)
-- fahrgestellnummer: Fahrzeugidentifikationsnummer (falls angegeben)"""
+5. Extrahiere nur tatsächlich vorhandene Fahrzeuge und erfinde keine Daten"""
 
         # Detailliertere Anweisungen für schwierigere Dokumente
         if more_detailed:

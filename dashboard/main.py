@@ -5,6 +5,7 @@ import seaborn as sns
 import os
 import sys
 import logging
+import numpy as np
 from pathlib import Path
 from PIL import Image
 import time
@@ -14,6 +15,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Importe aus anderen Modulen
 from pdf_extractor.auction_catalog_extractor import AuctionCatalogExtractor
+from pdf_extractor.ai_pdf_extractor import AIPdfExtractor
 from scraper.mobile_de_scraper import MobileDeScraper
 from data_analysis.analyzer import VehicleProfitabilityAnalyzer
 from ai_integration.deepseek_client import DeepSeekClient
@@ -47,7 +49,11 @@ class FahrzeugAnalyseDashboard:
         self.setup_page()
         self.init_session_state()
         self.setup_sidebar()
-        self.pdf_extractor = AuctionCatalogExtractor()  # Verwenden Sie den spezialisierten Extraktor
+
+        # Beide Extraktoren initialisieren
+        self.pdf_extractor = AuctionCatalogExtractor()  # Regelbasierter Extraktor
+        self.ai_pdf_extractor = AIPdfExtractor()        # KI-basierter Extraktor
+
         self.scraper = MobileDeScraper(headless=True)
         self.analyzer = VehicleProfitabilityAnalyzer()
         self.ai_client = DeepSeekClient()
@@ -172,14 +178,25 @@ class FahrzeugAnalyseDashboard:
         if uploaded_files:
             st.info(f"{len(uploaded_files)} PDF-Dateien wurden hochgeladen.")
 
+            # Option zur Auswahl der Extraktionsmethode
+            extraction_method = st.radio(
+                "Extraktionsmethode wählen:",
+                ["Regelbasiert (schneller)", "KI-basiert (genauer)"]
+            )
+
             if st.button("PDFs verarbeiten", use_container_width=True):
                 with st.spinner("Extrahiere Daten aus PDFs..."):
-                    # Verwende die process_auction_pdfs Methode
-                    df = self.pdf_extractor.process_auction_pdfs(uploaded_files)
+                    # Je nach Auswahl die passende Methode verwenden
+                    if extraction_method == "KI-basiert (genauer)":
+                        df = self.ai_pdf_extractor.process_auction_pdfs(uploaded_files)
+                        method_used = "KI"
+                    else:
+                        df = self.pdf_extractor.process_auction_pdfs(uploaded_files)
+                        method_used = "Regelbasiert"
 
                     if not df.empty:
                         st.session_state.pdf_data = df
-                        st.success(f"✅ Daten aus {len(df)} Fahrzeugen erfolgreich extrahiert!")
+                        st.success(f"✅ Daten aus {len(df)} Fahrzeugen erfolgreich mit {method_used}-Extraktor extrahiert!")
 
                         # Zeige extrahierte Daten
                         st.subheader("Extrahierte Fahrzeugdaten")
